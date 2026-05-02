@@ -161,10 +161,12 @@ create table if not exists config (
     start_block int8,
     batch_size int2 not null default 2000,
     concurrency int2 not null default 10,
+    poll_interval_ms int4 not null default 1000,
     popular bool default false,
     hidden bool default false,
     provision_key text
 );
+alter table config add column if not exists poll_interval_ms int4 not null default 1000;
 
 insert into
     config(enabled, chain, name, url)

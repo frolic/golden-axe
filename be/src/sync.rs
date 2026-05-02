@@ -51,6 +51,7 @@ pub struct RemoteConfig {
     pub start_block: Option<i64>,
     pub batch_size: u16,
     pub concurrency: u16,
+    pub poll_interval_ms: u32,
 }
 
 impl fmt::Display for RemoteConfig {
@@ -69,7 +70,7 @@ impl RemoteConfig {
             .get()
             .await?
             .query(
-                "select enabled, chain, url, start_block, batch_size, concurrency from config",
+                "select enabled, chain, url, start_block, batch_size, concurrency, poll_interval_ms from config",
                 &[],
             )
             .await?
@@ -84,6 +85,7 @@ impl RemoteConfig {
                 start_block: row.get("start_block"),
                 batch_size: row.get::<&str, U16>("batch_size").to(),
                 concurrency: row.get::<&str, U16>("concurrency").to(),
+                poll_interval_ms: row.get::<&str, i32>("poll_interval_ms") as u32,
             })
             .collect_vec())
     }
@@ -152,6 +154,7 @@ pub struct Downloader {
     pub batch_size: u16,
     pub concurrency: u16,
     pub start_block: Option<i64>,
+    pub poll_interval_ms: u32,
 
     be_pool: Pool,
     jrpc_client: Arc<jrpc::Client>,
@@ -171,6 +174,7 @@ impl Downloader {
             batch_size: config.batch_size,
             concurrency: config.concurrency,
             start_block: config.start_block,
+            poll_interval_ms: config.poll_interval_ms,
             be_pool,
             jrpc_client,
             broadcaster,
@@ -224,7 +228,10 @@ impl Downloader {
         loop {
             match self.download(batch_size).await {
                 Err(Error::Wait) => {
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(
+                        self.poll_interval_ms as u64,
+                    ))
+                    .await;
                 }
                 Err(Error::Retry(err)) => {
                     batch_size = std::cmp::max(1, batch_size / 10);
